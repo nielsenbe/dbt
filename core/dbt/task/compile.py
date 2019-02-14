@@ -2,10 +2,10 @@ from dbt.node_runners import CompileRunner
 from dbt.node_types import NodeType
 import dbt.ui.printer
 
-from dbt.task.runnable import RunnableTask
+from dbt.task.runnable import GraphRunnableTask
 
 
-class CompileTask(RunnableTask):
+class CompileTask(GraphRunnableTask):
     def raise_on_first_error(self):
         return True
 

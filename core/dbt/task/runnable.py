@@ -1,7 +1,10 @@
 import os
 import time
+from multiprocessing.dummy import Pool as ThreadPool
 
-from dbt.task.base_task import BaseTask
+import six
+
+from dbt.task.base import ConfiguredTask
 from dbt.adapters.factory import get_adapter
 from dbt.logger import GLOBAL_LOGGER as logger
 from dbt.compilation import compile_manifest
@@ -14,8 +17,6 @@ import dbt.ui.printer
 import dbt.utils
 
 import dbt.graph.selector
-
-from multiprocessing.dummy import Pool as ThreadPool
 
 RESULT_FILE_NAME = 'run_results.json'
 MANIFEST_FILE_NAME = 'manifest.json'
@@ -32,9 +33,10 @@ def load_manifest(config):
     return manifest
 
 
-class BaseRunnableTask(BaseTask):
+
+class GraphRunnableTask(ConfiguredTask):
     def __init__(self, args, config):
-        super(BaseRunnableTask, self).__init__(args, config)
+        super(GraphRunnableTask, self).__init__(args, config)
         self.manifest = None
         self.linker = None
         self.job_queue = None
@@ -46,12 +48,16 @@ class BaseRunnableTask(BaseTask):
         self._skipped_children = {}
         self._raise_next_tick = None
 
+    def select_nodes(self):
+        selector = dbt.graph.selector.NodeSelector(self.linker, self.manifest)
+        selected_nodes = selector.select(self.build_query())
+        return selected_nodes
+
     def _runtime_initialize(self):
         self.manifest = load_manifest(self.config)
         self.linker = compile_manifest(self.config, self.manifest)
 
-        selector = dbt.graph.selector.NodeSelector(self.linker, self.manifest)
-        selected_nodes = selector.select(self.build_query())
+        selected_nodes = self.select_nodes()
         self.job_queue = self.linker.as_graph_queue(self.manifest,
                                                     selected_nodes)
 
@@ -229,12 +235,6 @@ class BaseRunnableTask(BaseTask):
     def after_hooks(self, adapter, results, elapsed):
         pass
 
-    def task_end_messages(self, results):
-        raise dbt.exceptions.NotImplementedException('Not Implemented')
-
-    def get_result(self, results, elapsed_time, generated_at):
-        raise dbt.exceptions.NotImplementedException('Not Implemented')
-
     def run(self):
         """
         Run dbt for the query, based on the graph.
@@ -279,8 +279,6 @@ class BaseRunnableTask(BaseTask):
         failures = [r for r in results if r.error or r.failed]
         return len(failures) == 0
 
-
-class RunnableTask(BaseRunnableTask):
     def get_model_schemas(self, selected_uids):
         schemas = set()
         for node in self.manifest.nodes.values():

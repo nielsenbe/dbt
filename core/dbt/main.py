@@ -5,6 +5,7 @@ import argparse
 import os.path
 import sys
 import traceback
+from contextlib import contextmanager
 
 import dbt.version
 import dbt.flags as flags
@@ -29,8 +30,7 @@ import dbt.deprecations
 import dbt.profiler
 
 from dbt.utils import ExitCodes
-from dbt.config import Project, UserConfig, RuntimeConfig, PROFILES_DIR, \
-    read_profiles
+from dbt.config import Project, UserConfig, RuntimeConfig, PROFILES_DIR
 from dbt.exceptions import DbtProjectError, DbtProfileError, RuntimeException
 
 
@@ -148,138 +148,60 @@ def handle_and_check(args):
 
         reset_adapters()
 
-        try:
-            task, res = run_from_args(parsed)
-        finally:
-            dbt.tracking.flush()
-
+        task, res = run_from_args(parsed)
         success = task.interpret_results(res)
 
         return res, success
 
 
-def get_nearest_project_dir():
-    root_path = os.path.abspath(os.sep)
-    cwd = os.getcwd()
-
-    while cwd != root_path:
-        project_file = os.path.join(cwd, "dbt_project.yml")
-        if os.path.exists(project_file):
-            return cwd
-        cwd = os.path.dirname(cwd)
-
-    return None
-
-
-def run_from_args(parsed):
-    task = None
-    cfg = None
-
-    if parsed.which in ('init', 'debug'):
-        # bypass looking for a project file if we're running `dbt init` or
-        # `dbt debug`
-        task = parsed.cls(args=parsed)
-    else:
-        nearest_project_dir = get_nearest_project_dir()
-        if nearest_project_dir is None:
-            raise RuntimeException(
-                "fatal: Not a dbt project (or any of the parent directories). "
-                "Missing dbt_project.yml file"
-            )
-
-        os.chdir(nearest_project_dir)
-
-        res = invoke_dbt(parsed)
-        if res is None:
-            raise RuntimeException("Could not run dbt")
-        else:
-            task, cfg = res
-
-    log_path = None
-
-    if cfg is not None:
-        log_path = cfg.log_path
-
-    initialize_logger(parsed.debug, log_path)
-    logger.debug("Tracking: {}".format(dbt.tracking.active_user.state()))
-
-    dbt.tracking.track_invocation_start(config=cfg, args=parsed)
-
-    results = run_from_task(task, cfg, parsed)
-
-    return task, results
-
-
-def run_from_task(task, cfg, parsed_args):
-    result = None
+@contextmanager
+def track_run(task):
+    dbt.tracking.track_invocation_start(config=task.config, args=task.args)
     try:
-        result = task.run()
+        yield
         dbt.tracking.track_invocation_end(
-            config=cfg, args=parsed_args, result_type="ok"
+            config=task.config, args=task.args, result_type="ok"
         )
     except (dbt.exceptions.NotImplementedException,
             dbt.exceptions.FailedToConnectException) as e:
         logger.info('ERROR: {}'.format(e))
         dbt.tracking.track_invocation_end(
-            config=cfg, args=parsed_args, result_type="error"
+            config=task.config, args=task.args, result_type="error"
         )
     except Exception as e:
         dbt.tracking.track_invocation_end(
-            config=cfg, args=parsed_args, result_type="error"
+            config=task.config, args=task.args, result_type="error"
         )
         raise
+    finally:
+        dbt.tracking.flush()
 
-    return result
 
-
-def invoke_dbt(parsed):
-    task = None
-    cfg = None
-
+def run_from_args(parsed):
     log_cache_events(getattr(parsed, 'log_cache_events', False))
+    update_flags(parsed)
+
     logger.info("Running with dbt{}".format(dbt.version.installed))
 
-    try:
-        if parsed.which in {'deps', 'clean'}:
-            # deps doesn't need a profile, so don't require one.
-            cfg = Project.from_current_directory(getattr(parsed, 'vars', '{}'))
-        elif parsed.which != 'debug':
-            # for debug, we will attempt to load the various configurations as
-            # part of the task, so just leave cfg=None.
-            cfg = RuntimeConfig.from_args(parsed)
-    except DbtProjectError as e:
-        logger.info("Encountered an error while reading the project:")
-        logger.info(dbt.compat.to_string(e))
+    # this will convert DbtConfigErrors into RuntimeExceptions
+    task = parsed.cls.from_args(args=parsed)
+    logger.debug("running dbt with arguments %s", parsed)
 
-        dbt.tracking.track_invalid_invocation(
-            config=cfg,
-            args=parsed,
-            result_type=e.result_type)
+    log_path = None
+    if task.config is not None:
+        log_path = getattr(task.config, 'log_path', None)
+    initialize_logger(parsed.debug, log_path)
+    logger.debug("Tracking: {}".format(dbt.tracking.active_user.state()))
 
-        return None
-    except DbtProfileError as e:
-        logger.info("Encountered an error while reading profiles:")
-        logger.info("  ERROR {}".format(str(e)))
+    results = None
 
-        all_profiles = read_profiles(parsed.profiles_dir).keys()
+    with track_run(task):
+        results = task.run()
 
-        if len(all_profiles) > 0:
-            logger.info("Defined profiles:")
-            for profile in all_profiles:
-                logger.info(" - {}".format(profile))
-        else:
-            logger.info("There are no profiles defined in your "
-                        "profiles.yml file")
+    return task, results
 
-        logger.info(PROFILES_HELP_MESSAGE)
 
-        dbt.tracking.track_invalid_invocation(
-            config=cfg,
-            args=parsed,
-            result_type=e.result_type)
-
-        return None
-
+def update_flags(parsed):
     flags.NON_DESTRUCTIVE = getattr(parsed, 'non_destructive', False)
     flags.USE_CACHE = getattr(parsed, 'use_cache', True)
 
@@ -296,12 +218,6 @@ def invoke_dbt(parsed):
         flags.FULL_REFRESH = True
     elif arg_full_refresh:
         flags.FULL_REFRESH = True
-
-    logger.debug("running dbt with arguments %s", parsed)
-
-    task = parsed.cls(args=parsed, config=cfg)
-
-    return task, cfg
 
 
 def _build_base_subparser():
