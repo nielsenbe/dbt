@@ -58,7 +58,7 @@ class BaseTask(object):
             tracking.track_invalid_invocation(
                 args=args,
                 result_type=exc.result_type)
-            raise RuntimeException('Could not run dbt')
+            raise dbt.exceptions.RuntimeException('Could not run dbt')
         except DbtProfileError as exc:
             logger.info("Encountered an error while reading profiles:")
             logger.info("  ERROR {}".format(str(exc)))
@@ -78,7 +78,7 @@ class BaseTask(object):
             tracking.track_invalid_invocation(
                 args=args,
                 result_type=exc.result_type)
-            raise RuntimeException('Could not run dbt')
+            raise dbt.exceptions.RuntimeException('Could not run dbt')
         return cls(args, config)
 
     @abstractmethod
@@ -105,7 +105,7 @@ def get_nearest_project_dir():
 def move_to_nearest_project_dir():
     nearest_project_dir = get_nearest_project_dir()
     if nearest_project_dir is None:
-        raise RuntimeException(
+        raise dbt.exceptions.RuntimeException(
             "fatal: Not a dbt project (or any of the parent directories). "
             "Missing dbt_project.yml file"
         )
@@ -126,4 +126,3 @@ class ConfiguredTask(RequiresProjectTask):
 
 class ProjectOnlyTask(RequiresProjectTask):
     ConfigType = Project
-

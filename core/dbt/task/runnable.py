@@ -1,5 +1,6 @@
 import os
 import time
+from abc import abstractmethod
 from multiprocessing.dummy import Pool as ThreadPool
 
 import six
@@ -7,6 +8,7 @@ import six
 from dbt.task.base import ConfiguredTask
 from dbt.adapters.factory import get_adapter
 from dbt.logger import GLOBAL_LOGGER as logger
+from dbt.compat import abstractclassmethod
 from dbt.compilation import compile_manifest
 from dbt.contracts.graph.manifest import CompileResultNode
 from dbt.contracts.results import ExecutionResult
@@ -33,12 +35,20 @@ def load_manifest(config):
     return manifest
 
 
-
-class GraphRunnableTask(ConfiguredTask):
+class ManifestTask(ConfiguredTask):
     def __init__(self, args, config):
-        super(GraphRunnableTask, self).__init__(args, config)
+        super(ManifestTask, self).__init__(args, config)
         self.manifest = None
         self.linker = None
+
+    def _runtime_initialize(self):
+        self.manifest = load_manifest(self.config)
+        self.linker = compile_manifest(self.config, self.manifest)
+
+
+class GraphRunnableTask(ManifestTask):
+    def __init__(self, args, config):
+        super(GraphRunnableTask, self).__init__(args, config)
         self.job_queue = None
         self._flattened_nodes = None
 
@@ -54,9 +64,7 @@ class GraphRunnableTask(ConfiguredTask):
         return selected_nodes
 
     def _runtime_initialize(self):
-        self.manifest = load_manifest(self.config)
-        self.linker = compile_manifest(self.config, self.manifest)
-
+        super(GraphRunnableTask, self)._runtime_initialize()
         selected_nodes = self.select_nodes()
         self.job_queue = self.linker.as_graph_queue(self.manifest,
                                                     selected_nodes)
@@ -318,3 +326,20 @@ class GraphRunnableTask(ConfiguredTask):
 
     def task_end_messages(self, results):
         dbt.ui.printer.print_run_end_messages(results)
+
+
+
+class RemoteCallable(object):
+    METHOD_NAME = None
+    is_async = False
+
+    @abstractmethod
+    def handle_request(self, **kwargs):
+        raise dbt.exceptions.NotImplementedException('from_kwargs not implemented')
+
+    def safe_handle_request(self, **kwargs):
+        try:
+            return self.handle_request(**kwargs)
+        except dbt.exceptions.RuntimeException as exc:
+            # we have to convert this to a string for RPC responses
+            raise dbt.exceptions.RPCException(str(exc))
