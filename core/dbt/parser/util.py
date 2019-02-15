@@ -156,41 +156,57 @@ class ParserUtils(object):
         return manifest
 
     @classmethod
+    def process_refs_for_node(cls, manifest, current_project, node):
+        """Given a manifest and a node in that manifest, process its refs"""
+        target_model = None
+        target_model_name = None
+        target_model_package = None
+
+        for ref in node.refs:
+            if len(ref) == 1:
+                target_model_name = ref[0]
+            elif len(ref) == 2:
+                target_model_package, target_model_name = ref
+
+            target_model = cls.resolve_ref(
+                manifest,
+                target_model_name,
+                target_model_package,
+                current_project,
+                node.get('package_name'))
+
+            if target_model is None or target_model is cls.DISABLED:
+                # This may raise. Even if it doesn't, we don't want to add
+                # this node to the graph b/c there is no destination node
+                node.config['enabled'] = False
+                dbt.utils.invalid_ref_fail_unless_test(
+                        node, target_model_name, target_model_package,
+                        disabled=(target_model is cls.DISABLED)
+                )
+
+                continue
+
+            target_model_id = target_model.get('unique_id')
+
+            node.depends_on['nodes'].append(target_model_id)
+            manifest.nodes[node['unique_id']] = node
+
+    @classmethod
+    def add_new_refs(cls, manifest, current_project, node):
+        """Given a new node that is not in the manifest, copy the manifest and
+        insert the new node into it as if it were part of regular ref processing
+        """
+        manifest = manifest.deepcopy(config=current_project)
+        if node.unique_id in manifest.nodes:
+            raise ValueError('todo: real error')
+        manifest.nodes[node.unique_id] = node
+        cls.process_refs_for_node(manifest, current_project, node)
+        return manifest
+
+    @classmethod
     def process_refs(cls, manifest, current_project):
-        for _, node in manifest.nodes.items():
-            target_model = None
-            target_model_name = None
-            target_model_package = None
-
-            for ref in node.refs:
-                if len(ref) == 1:
-                    target_model_name = ref[0]
-                elif len(ref) == 2:
-                    target_model_package, target_model_name = ref
-
-                target_model = cls.resolve_ref(
-                    manifest,
-                    target_model_name,
-                    target_model_package,
-                    current_project,
-                    node.get('package_name'))
-
-                if target_model is None or target_model is cls.DISABLED:
-                    # This may raise. Even if it doesn't, we don't want to add
-                    # this node to the graph b/c there is no destination node
-                    node.config['enabled'] = False
-                    dbt.utils.invalid_ref_fail_unless_test(
-                            node, target_model_name, target_model_package,
-                            disabled=(target_model is cls.DISABLED)
-                    )
-
-                    continue
-
-                target_model_id = target_model.get('unique_id')
-
-                node.depends_on['nodes'].append(target_model_id)
-                manifest.nodes[node['unique_id']] = node
-
+        for node in manifest.nodes.values():
+            cls.process_refs_for_node(manifest, current_project, node)
         return manifest
 
     @classmethod
