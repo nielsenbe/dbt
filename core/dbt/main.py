@@ -21,6 +21,7 @@ import dbt.task.archive as archive_task
 import dbt.task.generate as generate_task
 import dbt.task.serve as serve_task
 import dbt.task.freshness as freshness_task
+from dbt.task.rpc_server import RPCServerTask
 from dbt.adapters.factory import reset_adapters
 
 import dbt.tracking
@@ -560,6 +561,27 @@ def _build_source_snapshot_freshness_subparser(subparsers, base_subparser):
     return sub
 
 
+def _build_rpc_subparser(subparsers, base_subparser):
+    sub = subparsers.add_parser(
+        'rpc',
+        parents=[base_subparser],
+        help='Start a json-rpc server',
+    )
+    sub.add_argument(
+        '--host',
+        default='0.0.0.0',
+        help='Specify the host to listen on for the rpc server.'
+    )
+    sub.add_argument(
+        '--port',
+        default=8580,
+        type=int,
+        help='Specify the port number for the rpc server.'
+    )
+    sub.set_defaults(cls=RPCServerTask, which='rpc')
+    return sub
+
+
 def parse_args(args):
     p = DBTArgumentParser(
         prog='dbt: data build tool',
@@ -629,10 +651,11 @@ def parse_args(args):
     _build_deps_subparser(subs, base_subparser)
     _build_archive_subparser(subs, base_subparser)
 
+    rpc_sub = _build_rpc_subparser(subs, base_subparser)
     run_sub = _build_run_subparser(subs, base_subparser)
     compile_sub = _build_compile_subparser(subs, base_subparser)
     generate_sub = _build_docs_generate_subparser(docs_subs, base_subparser)
-    _add_common_arguments(run_sub, compile_sub, generate_sub)
+    _add_common_arguments(run_sub, compile_sub, generate_sub, rpc_sub)
 
     _build_seed_subparser(subs, base_subparser)
     _build_docs_serve_subparser(docs_subs, base_subparser)
