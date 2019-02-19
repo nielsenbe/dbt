@@ -10,14 +10,41 @@ MSSQLSERVER_CREDENTIALS_CONTRACT = {
     'type': 'object',
     'additionalProperties': False,
     'properties': {
+        'driver': {
+            'type': 'string',
+        },
+        'server': {
+            'type': 'string',
+        },
         'database': {
+            'type': 'string'
+        },
+        'trusted_connection': {
+            'type': 'string'
+        },
+        'dsn': {
+            'type': 'string'
+        },
+        'username': {
             'type': 'string',
         },
-        'schema': {
-            'type': 'string',
+        'password': {
+            'type': 'string'
         },
-    },
-    'required': ['database', 'schema'],
+        'encrypt': {
+            'type': 'string'
+        },
+        'trust_server_certificate': {
+            'type': 'string'
+        },
+        'connection_timeout': {
+            'type': 'integer'
+        },
+        'other_parameters': {
+            'type': 'string'
+        },
+        'required': ['driver'],
+    }
 }
 
 
@@ -45,7 +72,50 @@ class MsSqlServerConnectionManager(SQLConnectionManager):
             logger.debug('Connection is already open, skipping open.')
             return connection
 
-        base_credentials = connection.credentials
+        credentials = connection.credentials
 
         try:
-            handle =
+            # Build connection string
+            cs = ""
+            cs += buildConnectionString("Driver", connection.driver)
+            cs += buildConnectionString("Server", connection.server)
+            cs += buildConnectionString("Database", connection.database)
+            cs += buildConnectionString("Trusted_Connection", connection.trusted_connection)
+            cs += buildConnectionString("Dsn", connection.dsn)
+            cs += buildConnectionString("Uid", connection.username)
+            cs += buildConnectionString("Pwd", connection.password)
+            cs += buildConnectionString("Encrypt", connection.encrypt)
+            cs += buildConnectionString("TrustServerCertificate", connection.trust_server_certificate)
+            cs += buildConnectionString("Connection Timeout", connection.connection_timeout)
+            cs += connection.other_parameters if connection.other_parameters else ""
+
+            handle = pyodbc.connect(cs)
+
+            connection.handle = handle
+            connection.state = 'open'
+        except pyodbc.Error as e:
+            logger.debug("Got an error when attempting to open a snowflake "
+                         "connection: '{}'"
+                         .format(e))
+
+            connection.handle = None
+            connection.state = 'fail'
+
+            raise dbt.exceptions.FailedToConnectException(str(e))
+
+        return connection
+
+    @staticmethod
+    def buildConnectionString(cls, key, value):
+        if value != "" and value != None:
+            f"{key}={value};"
+        else:
+            ""
+             
+    def cancel(self, connection):
+        connection_name = connection.name
+        handle = connection.handle
+
+        logger.debug("Cancelling query '{}'".format(connection_name))
+        handle.cursor().cancel()
+        logger.debug("Cancel query '{}'".format(connection_name))
