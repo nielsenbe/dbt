@@ -1,0 +1,20 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\plugins",
+    "\\plugins\\mssqlserver",
+    "\\plugins\\mssqlserver\\dbt",
+    "\\plugins\\mssqlserver\\dbt\\adapters",
+    "\\plugins\\mssqlserver\\dbt\\adapters\\mssqlserver",
+    "\\plugins\\postgres",
+    "\\plugins\\postgres\\dbt",
+    "\\plugins\\postgres\\dbt\\adapters",
+    "\\plugins\\postgres\\dbt\\adapters\\postgres",
+    "\\plugins\\snowflake",
+    "\\plugins\\snowflake\\dbt",
+    "\\plugins\\snowflake\\dbt\\adapters",
+    "\\plugins\\snowflake\\dbt\\adapters\\snowflake"
+  ],
+  "SelectedNode": "\\plugins\\snowflake\\dbt\\adapters\\snowflake\\connections.py",
+  "PreviewInSolutionExplorer": false
+}

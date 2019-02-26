@@ -116,6 +116,9 @@ class MsSqlServerConnectionManager(SQLConnectionManager):
         connection_name = connection.name
         handle = connection.handle
 
-        logger.debug("Cancelling query '{}'".format(connection_name))
-        handle.cursor().cancel()
-        logger.debug("Cancel query '{}'".format(connection_name))
+        logger.debug("Cancelling query '{}' ({})".format(connection_name, pid))
+
+        handle.rollback()
+        handle.close()
+
+        logger.debug("Cancel query '{}': {}".format(connection_name, res))
