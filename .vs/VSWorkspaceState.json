@@ -1,20 +1,19 @@
 {
   "ExpandedNodes": [
     "",
+    "\\core\\dbt",
+    "\\core\\dbt\\adapters",
+    "\\core\\dbt\\adapters\\base",
     "\\plugins",
     "\\plugins\\mssqlserver",
-    "\\plugins\\mssqlserver\\dbt",
-    "\\plugins\\mssqlserver\\dbt\\adapters",
-    "\\plugins\\mssqlserver\\dbt\\adapters\\mssqlserver",
     "\\plugins\\postgres",
     "\\plugins\\postgres\\dbt",
     "\\plugins\\postgres\\dbt\\adapters",
-    "\\plugins\\postgres\\dbt\\adapters\\postgres",
-    "\\plugins\\snowflake",
-    "\\plugins\\snowflake\\dbt",
-    "\\plugins\\snowflake\\dbt\\adapters",
-    "\\plugins\\snowflake\\dbt\\adapters\\snowflake"
+    "\\plugins\\redshift\\dbt",
+    "\\plugins\\redshift\\dbt\\adapters",
+    "\\plugins\\redshift\\dbt\\adapters\\redshift",
+    "\\plugins\\snowflake"
   ],
-  "SelectedNode": "\\plugins\\snowflake\\dbt\\adapters\\snowflake\\connections.py",
+  "SelectedNode": "\\plugins\\mssqlserver\\dbt\\adapters\\mssqlserver\\connections.py",
   "PreviewInSolutionExplorer": false
 }
